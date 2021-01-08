@@ -1,5 +1,4 @@
-use std::io::prelude::*;
-use std::io::BufReader;
+use std::io::{BufReader, Read, BufRead};
 use std::convert::TryFrom;
 
 use anyhow::{Result, Context, Error};
@@ -9,7 +8,7 @@ const CRLF: &'static str = "\r\n";
 #[derive(Debug, PartialEq)]
 pub struct Header {
     op: String,
-    count: i64,
+    pub count: i64,
 }
 
 impl TryFrom<String> for Header {
@@ -28,15 +27,15 @@ impl TryFrom<String> for Header {
     }
 }
 
-pub fn decode<T: Read>(mut reader: BufReader<T>) -> Result<()> {
+pub fn decode<T: Read>(mut reader: BufReader<T>) -> Result<Vec<String>> {
     let header = read_header(&mut reader)?;
     let mut lines = vec![];
     
     for _ in 0..header.count {
-        lines.push(read_line(&mut reader));
+        lines.push(read_line(&mut reader)?);
     }
 
-    Ok(())
+    Ok(lines)
 }
 
 fn read_header<T: Read>(reader: &mut BufReader<T>) -> Result<Header> {
@@ -46,8 +45,17 @@ fn read_header<T: Read>(reader: &mut BufReader<T>) -> Result<Header> {
     Header::try_from(header)
 }
 
-fn read_line<T: Read>(reader: &mut BufReader<T>) -> Result<Line> {
-    
+fn read_line<T: Read>(reader: &mut BufReader<T>) -> Result<String> {
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+
+    let header = Header::try_from(line)?;
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    let line = line.strip_suffix("\r\n").ok_or(Error::msg("Line did not end with line feed terminator"))?;
+    assert!(line.as_bytes().len() == header.count as usize);
+
+    Ok(line.to_string())
 }
 
 #[cfg(test)]
@@ -59,7 +67,16 @@ mod test {
         let buf_reader = BufReader::new("*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n".as_bytes());
         assert_eq!(
             decode(buf_reader).unwrap(),
-            Header { op: "*".to_string(), arg: 2 }
+            vec!["foo", "bar"]
+        );
+    }
+
+    #[test]
+    fn it_decodes_a_set_message() {
+        let buf_reader = BufReader::new("*3\r\n$3\r\nSET\r\n$1\r\nA\r\n$5\r\nhello\r\n".as_bytes());
+        assert_eq!(
+            decode(buf_reader).unwrap(),
+            vec!["SET", "A", "hello"]
         );
     }
 
