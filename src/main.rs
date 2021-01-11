@@ -1,23 +1,26 @@
 use std::io::{BufReader, BufWriter, Write};
 use std::net::{TcpListener, TcpStream};
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
-use commands::RedisType;
+use rayon::ThreadPoolBuilder;
 
 mod commands;
 mod protocol;
+mod types;
+
+use types::Dictionary;
 
 
-fn handle_client(stream: TcpStream, dictionary: &mut BTreeMap<String, RedisType>) {
+fn handle_client(stream: TcpStream, dictionary: Dictionary) {
     let mut writer = BufWriter::new(&stream);
     let reader = BufReader::new(&stream);
-    // Read a message from the stream
-    // Decode the message
+    
     let command = protocol::decode(reader).unwrap();
     dbg!(&command);
-    let response = commands::dispatch(command, dictionary);
+    dbg!(&dictionary);
+    let response = commands::dispatch(command, &dictionary);
     dbg!(&response);
-    dbg!(dictionary);
 
     match response {
         Ok(r) => {
@@ -35,11 +38,16 @@ fn handle_client(stream: TcpStream, dictionary: &mut BTreeMap<String, RedisType>
 
 fn main() -> std::io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:6379")?;
-    let mut dictionary: BTreeMap<String, RedisType> = BTreeMap::new();
+    let dictionary: Dictionary = Arc::new(Mutex::new(BTreeMap::new()));
+    let pool = ThreadPoolBuilder::new().num_threads(8).build().unwrap();
        
     // accept connections and process them serially
     for stream in listener.incoming() {
-        handle_client(stream?, &mut dictionary);
+        let stream = stream?;
+        let dictionary = dictionary.clone();
+        pool.spawn(move || {
+            handle_client(stream, dictionary);
+        });
     }
     Ok(())
 }
