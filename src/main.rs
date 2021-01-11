@@ -2,11 +2,13 @@ use std::io::{BufReader, BufWriter, Write};
 use std::net::{TcpListener, TcpStream};
 use std::collections::BTreeMap;
 
+use commands::RedisType;
+
 mod commands;
 mod protocol;
 
 
-fn handle_client(stream: TcpStream, dictionary: &mut BTreeMap<String, String>) {
+fn handle_client(stream: TcpStream, dictionary: &mut BTreeMap<String, RedisType>) {
     let mut writer = BufWriter::new(&stream);
     let reader = BufReader::new(&stream);
     // Read a message from the stream
@@ -19,11 +21,13 @@ fn handle_client(stream: TcpStream, dictionary: &mut BTreeMap<String, String>) {
 
     match response {
         Ok(r) => {
-            let r = r.map(|val| val.respond()).unwrap_or_else(|| "OK".to_string());
-            writer.write(format!("+{}\r\n", r).as_bytes()).expect("Could not send response");
+            let r = r.map(|val| val.respond()).unwrap_or_else(|| "+OK\r\n".to_string());
+            dbg!(&r);
+            writer.write(r.as_bytes()).expect("Could not send response");
         },
         Err(e) => {
             let e = e.to_string();
+            dbg!(&e);
             writer.write(format!("-{}\r\n", e).as_bytes()).expect("Could not send response");
         }
     };
@@ -31,7 +35,7 @@ fn handle_client(stream: TcpStream, dictionary: &mut BTreeMap<String, String>) {
 
 fn main() -> std::io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:6379")?;
-    let mut dictionary: BTreeMap<String, String> = BTreeMap::new();
+    let mut dictionary: BTreeMap<String, RedisType> = BTreeMap::new();
        
     // accept connections and process them serially
     for stream in listener.incoming() {
