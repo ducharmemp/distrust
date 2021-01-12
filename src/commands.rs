@@ -1,48 +1,50 @@
-use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
+use std::cow::Cow;
 
 use anyhow::{ensure, Error, Result};
 
 use crate::types::{RedisType, UnwrappedDictionary};
 
-pub enum Command {
+struct Foo { bar: i64; }
+
+pub enum Command<'a> {
     Command,
-    Set(String, String),
-    Get(String),
-    Del(Vec<String>),
-    GetSet(String, String),
-    LPush(String, Vec<String>),
-    RPush(String, Vec<String>),
+    Set(&'a str, &'a str),
+    Get(&'a str),
+    Del(&'a[&'a str]),
+    GetSet(&'a str, &'a str),
+    LPush(&'a str, &'a[&'a str]),
+    RPush(&'a str, &'a[&'a str]),
     LPop,
-    RPop,
+    RPop
 }
 
-impl TryFrom<Vec<String>> for Command {
+impl<'a> TryFrom<&'a[&'a str]> for Command<'a> {
     type Error = Error;
 
-    fn try_from(other: Vec<String>) -> Result<Command> {
+    fn try_from(other: &'a[&'a str]) -> Result<Command<'a>> {
         let (head, tail) = other.split_at(1);
-        let head = head.get(0).ok_or(Error::msg("No command found"))?;
-        let get_at = |parts: &[String], index: usize| -> Result<String> {
+        let head = &head.get(0).ok_or(Error::msg("No command found"))?;
+        let get_at = |parts: &'a[&'a str], index: usize| -> Result<&str> {
             let part = parts.get(index);
             let part = part.ok_or(Error::msg("Syntax error"));
 
-            Ok(part?.clone())
+            Ok(part?)
         };
 
         let parsed_command = match head.to_lowercase().as_str() {
-            "set" => Command::Set(get_at(tail, 0)?, get_at(tail, 1)?),
-            "get" => Command::Get(get_at(tail, 0)?),
-            "del" => Command::Del(Vec::from(tail)),
-            "getset" => Command::GetSet(get_at(tail, 0)?, get_at(tail, 1)?),
+            "set" => Command::Set(&get_at(tail, 0)?, &get_at(tail, 1)?),
+            "get" => Command::Get(&get_at(tail, 0)?),
+            "del" => Command::Del(&tail),
+            "getset" => Command::GetSet(&get_at(tail, 0)?, &get_at(tail, 1)?),
             "lpush" => Command::LPush(
-                get_at(tail, 0)?,
-                Vec::from(tail[1..].iter().cloned().collect::<Vec<_>>()),
+                &get_at(tail, 0)?,
+                &tail[1..],
             ),
             "rpush" => Command::RPush(
-                get_at(tail, 0)?,
-                Vec::from(tail[1..].iter().cloned().collect::<Vec<_>>()),
+                &get_at(tail, 0)?,
+                &tail[1..],
             ),
             "command" => Command::Command,
             _ => unreachable!(),

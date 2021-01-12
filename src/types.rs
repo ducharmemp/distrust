@@ -27,14 +27,14 @@ impl RedisType {
     }
   }
 
-  pub fn is_integer(&self) -> bool {
+  pub fn _is_integer(&self) -> bool {
       match self {
           RedisType::Integer(_) => true,
           _ => false
       }
   }
 
-  pub fn is_string(&self) -> bool {
+  pub fn _is_string(&self) -> bool {
     match self {
         RedisType::String(_) => true,
         _ => false
@@ -48,7 +48,7 @@ impl RedisType {
     }
   }
   
-  pub fn is_nil(&self) -> bool {
+  pub fn _is_nil(&self) -> bool {
     match self {
         RedisType::Nil => true,
         _ => false
